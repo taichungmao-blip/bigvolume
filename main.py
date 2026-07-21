@@ -131,8 +131,8 @@ def find_bottom_consolidation_stocks():
             if current_vol > (recent_mean_vol * 1.5):
                 continue
                 
-            # 條件 E: 排除流動性過差的個股與高價股
-            if recent_mean_vol < 100000 or current_close >= 100: 
+            # 條件 E: 排除流動性過差的個股，並鎖定收盤價小於 20 元的低價股
+            if recent_mean_vol < 100000 or current_close >= 20: 
                 continue
 
             clean_code = ticker.split('.')[0]
@@ -153,7 +153,7 @@ def find_bottom_consolidation_stocks():
 
     # 組合 Discord 訊息
     message = f"🎯 **台股 {today_str} 爆量拉回極度靜止策略清單**\n" + "="*30 + "\n"
-    message += "(條件：歷史出量、近期量縮至10%以下、價格嚴格貼齊起漲點且無波動)\n\n"
+    message += "(條件：20元以下、歷史出量、近期量縮至10%以下、價格嚴格貼齊起漲點且無波動)\n\n"
     if matched_stocks:
         message += "\n\n".join(matched_stocks)
     else:
