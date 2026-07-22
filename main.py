@@ -83,12 +83,12 @@ def find_bottom_consolidation_stocks():
     for ticker in tickers:
         try:
             df = data[ticker].dropna(subset=['Close', 'Volume', 'High', 'Low']).copy()
-            if df.empty or len(df) < 90: 
+            if df.empty or len(df) < 100: 
                 continue
             
-            recent_days = 15     
-            past_start = 90      
-            past_end = 15        
+            recent_days = 20     
+            past_start = 100     
+            past_end = 20        
             
             recent_df = df.iloc[-recent_days:]
             past_df = df.iloc[-past_start:-past_end]
@@ -120,7 +120,7 @@ def find_bottom_consolidation_stocks():
                 continue
                 
             # 條件 B: 近期最高最低價差極小 (振幅小於 8%)
-            if (recent_max_p - recent_min_p) / recent_min_p > 0.08:
+            if (recent_max_p - recent_min_p) / recent_min_p > 0.05:
                 continue
                 
             # 條件 C: 近期極度量縮 (近期均量不到當初爆量日成交量的 10%)
