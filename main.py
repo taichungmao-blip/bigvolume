@@ -140,13 +140,16 @@ def find_bottom_consolidation_stocks():
             clean_code = ticker.split('.')[0]
             name = stock_dict[ticker]
             
+            # 計算距離基準價的幅度
+            diff_pct = (current_close - base_price) / base_price * 100
+            
             pe_str = get_yahoo_pe(clean_code)
             yahoo_link = f"<https://tw.stock.yahoo.com/quote/{clean_code}/technical-analysis>"
             
             matched_stocks.append(
                 f"📊 **{clean_code} {name}** | {today_slash_str}\n"
                 f"收盤價: `{current_close:.2f}` | 一個月盤整均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}`\n"
-                f"🔍 歷史爆量基準價約為 `{base_price:.2f}`\n"
+                f"🔍 歷史爆量基準價: `{base_price:.2f}` (距基準價幅度: `{diff_pct:+.2f}%`)\n"
                 f"🔗 {yahoo_link}"
             )
                 
