@@ -83,14 +83,12 @@ def find_bottom_consolidation_stocks():
     for ticker in tickers:
         try:
             df = data[ticker].dropna(subset=['Close', 'Volume', 'High', 'Low']).copy()
-            if df.empty or len(df) < 120:  # 確保有足夠的半年資料來算兩個月的盤整
+            if df.empty or len(df) < 90:  
                 continue
             
-            # --- 關鍵參數修改區 ---
-            recent_days = 40     # 近期盤整觀察期拉長為 40 天 (約兩個月)
-            past_start = 120     # 尋找歷史爆量的起點往前推至 120 天前
-            past_end = 40        # 歷史爆量必須發生在兩個月 (40天) 以前
-            # ----------------------
+            recent_days = 20     # 近期盤整觀察期改為 20 天 (約一個月)
+            past_start = 80      # 尋找歷史爆量的起點往前推至 80 天前
+            past_end = 20        # 歷史爆量必須發生在一個月 (20天) 以前
             
             recent_df = df.iloc[-recent_days:]
             past_df = df.iloc[-past_start:-past_end]
@@ -110,7 +108,7 @@ def find_bottom_consolidation_stocks():
                 continue
             base_price = df['Close'].iloc[max_vol_pos-5:max_vol_pos].mean()
             
-            # 3. 檢查近期是否處於「量縮盤整」且「回到起漲點」 (兩個月靜止版)
+            # 3. 檢查近期是否處於「量縮盤整」且「回到起漲點」
             recent_mean_p = recent_df['Close'].mean()
             recent_max_p = recent_df['Close'].max()
             recent_min_p = recent_df['Close'].min()
@@ -119,19 +117,19 @@ def find_bottom_consolidation_stocks():
             current_close = df['Close'].iloc[-1]
             current_vol = df['Volume'].iloc[-1]
             
-            # 條件 A: 兩個月內的均價與當初起漲點差異極小 (誤差 5% 內)
+            # 條件 A: 一個月內的均價與當初起漲點差異極小 (誤差 5% 內)
             if abs(recent_mean_p - base_price) / base_price > 0.05:
                 continue
                 
-            # 條件 B: 兩個月內的最高最低價差極小 (因時間拉長，放寬至振幅小於 12%)
-            if (recent_max_p - recent_min_p) / recent_min_p > 0.12:
+            # 條件 B: 一個月內的最高最低價差極小 (維持振幅小於 8%)
+            if (recent_max_p - recent_min_p) / recent_min_p > 0.08:
                 continue
                 
-            # 條件 C: 兩個月內極度量縮 (近期均量不到當初爆量日成交量的 10%)
+            # 條件 C: 一個月內極度量縮 (近期均量不到當初爆量日成交量的 10%)
             if recent_mean_vol > (max_vol * 0.10):
                 continue
                 
-            # 條件 D: 確保最後一個交易日依然保持絕對靜止 (不可大於兩個月極低均量的 1.5 倍)
+            # 條件 D: 確保最後一個交易日依然保持絕對靜止 (不可大於一個月極低均量的 1.5 倍)
             if current_vol > (recent_mean_vol * 1.5):
                 continue
                 
@@ -147,7 +145,7 @@ def find_bottom_consolidation_stocks():
             
             matched_stocks.append(
                 f"📊 **{clean_code} {name}** | {today_slash_str}\n"
-                f"收盤價: `{current_close:.2f}` | 兩個月盤整均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}`\n"
+                f"收盤價: `{current_close:.2f}` | 一個月盤整均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}`\n"
                 f"🔍 歷史爆量基準價約為 `{base_price:.2f}`\n"
                 f"🔗 {yahoo_link}"
             )
@@ -156,8 +154,8 @@ def find_bottom_consolidation_stocks():
             continue
 
     # 組合 Discord 訊息
-    message = f"🎯 **台股 {today_str} 爆量拉回沉澱兩個月策略清單**\n" + "="*30 + "\n"
-    message += "(條件：20元以下、歷史出量、長達兩個月量縮至10%以下、價格嚴格貼齊起漲點且無波動)\n\n"
+    message = f"🎯 **台股 {today_str} 爆量拉回沉澱一個月策略清單**\n" + "="*30 + "\n"
+    message += "(條件：20元以下、歷史出量、長達一個月量縮至10%以下、價格振幅8%內)\n\n"
     if matched_stocks:
         message += "\n\n".join(matched_stocks)
     else:
