@@ -83,12 +83,14 @@ def find_bottom_consolidation_stocks():
     for ticker in tickers:
         try:
             df = data[ticker].dropna(subset=['Close', 'Volume', 'High', 'Low']).copy()
-            if df.empty or len(df) < 120:  
+            if df.empty or len(df) < 120:  # 確保有足夠的半年資料來算兩個月的盤整
                 continue
             
-            recent_days = 40     
-            past_start = 120     
-            past_end = 40        
+            # --- 關鍵參數修改區 ---
+            recent_days = 40     # 近期盤整觀察期拉長為 40 天 (約兩個月)
+            past_start = 120     # 尋找歷史爆量的起點往前推至 120 天前
+            past_end = 40        # 歷史爆量必須發生在兩個月 (40天) 以前
+            # ----------------------
             
             recent_df = df.iloc[-recent_days:]
             past_df = df.iloc[-past_start:-past_end]
@@ -108,7 +110,7 @@ def find_bottom_consolidation_stocks():
                 continue
             base_price = df['Close'].iloc[max_vol_pos-5:max_vol_pos].mean()
             
-            # 3. 檢查近期是否處於「量縮盤整」且「回到起漲點」
+            # 3. 檢查近期是否處於「量縮盤整」且「回到起漲點」 (兩個月靜止版)
             recent_mean_p = recent_df['Close'].mean()
             recent_max_p = recent_df['Close'].max()
             recent_min_p = recent_df['Close'].min()
@@ -121,8 +123,8 @@ def find_bottom_consolidation_stocks():
             if abs(recent_mean_p - base_price) / base_price > 0.05:
                 continue
                 
-            # 條件 B: 兩個月內的最高最低價差極小 (收緊至振幅小於 8%)
-            if (recent_max_p - recent_min_p) / recent_min_p > 0.08:
+            # 條件 B: 兩個月內的最高最低價差極小 (因時間拉長，放寬至振幅小於 12%)
+            if (recent_max_p - recent_min_p) / recent_min_p > 0.12:
                 continue
                 
             # 條件 C: 兩個月內極度量縮 (近期均量不到當初爆量日成交量的 10%)
@@ -155,7 +157,7 @@ def find_bottom_consolidation_stocks():
 
     # 組合 Discord 訊息
     message = f"🎯 **台股 {today_str} 爆量拉回沉澱兩個月策略清單**\n" + "="*30 + "\n"
-    message += "(條件：20元以下、歷史出量、長達兩個月量縮至10%以下、價格振幅8%內)\n\n"
+    message += "(條件：20元以下、歷史出量、長達兩個月量縮至10%以下、價格嚴格貼齊起漲點且無波動)\n\n"
     if matched_stocks:
         message += "\n\n".join(matched_stocks)
     else:
