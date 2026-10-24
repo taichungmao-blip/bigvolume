@@ -85,62 +85,69 @@ def find_bottom_consolidation_stocks():
             df = data[ticker].dropna(subset=['Close', 'Volume', 'High', 'Low']).copy()
             if df.empty or len(df) < 90:  
                 continue
+                
+            # 加入 60 日均線 (季線) 作為大趨勢濾網
+            df['MA60'] = df['Close'].rolling(window=60).mean()
             
-            recent_days = 20     # 近期盤整觀察期改為 20 天 (約一個月)
+            recent_days = 20     # 近期盤整觀察期 20 天
             past_start = 80      # 尋找歷史爆量的起點往前推至 80 天前
-            past_end = 20        # 歷史爆量必須發生在一個月 (20天) 以前
+            past_end = 20        # 歷史爆量必須發生在 20 天以前
             
             recent_df = df.iloc[-recent_days:]
             past_df = df.iloc[-past_start:-past_end]
             
-            # 1. 尋找歷史區間的最大量 (疑似爆量日)
             if past_df.empty:
                 continue
+                
+            # 1. 尋找歷史區間的最大量
             max_vol_idx = past_df['Volume'].idxmax()
             max_vol = past_df.loc[max_vol_idx, 'Volume']
             
             if max_vol < (past_df['Volume'].mean() * 3):
                 continue
                 
-            # 2. 尋找爆量前的「起漲點」基準價格
+            # 2. 定義防守基準價：爆量當日的低點
             max_vol_pos = df.index.get_loc(max_vol_idx)
-            if max_vol_pos < 5: 
-                continue
-            base_price = df['Close'].iloc[max_vol_pos-5:max_vol_pos].mean()
+            base_price = df['Low'].iloc[max_vol_pos]
+            breakout_close = df['Close'].iloc[max_vol_pos]
             
-            # 3. 檢查近期是否處於「量縮盤整」且「回到起漲點」
-            recent_mean_p = recent_df['Close'].mean()
-            recent_max_p = recent_df['Close'].max()
-            recent_min_p = recent_df['Close'].min()
+            # 3. 檢查各項盤整與趨勢條件
+            recent_min_p = recent_df['Low'].min()
+            recent_max_p = recent_df['High'].max()
             recent_mean_vol = recent_df['Volume'].mean()
             
             current_close = df['Close'].iloc[-1]
             current_vol = df['Volume'].iloc[-1]
+            current_ma60 = df['MA60'].iloc[-1]
             
-            # 條件 A: 一個月內的均價與當初起漲點差異極小 (誤差 5% 內)
-            if abs(recent_mean_p - base_price) / base_price > 0.05:
+            # 條件 A: 近期最低價不跌破爆量日低點 (守住支撐)
+            if recent_min_p < base_price:
                 continue
                 
-            # 條件 B: 一個月內的最高最低價差極小 (維持振幅小於 8%)
+            # 條件 B: 確保目前收盤價站上季線 (中長線多頭保護)
+            if pd.isna(current_ma60) or current_close < current_ma60:
+                continue
+                
+            # 條件 C: 近一個月振幅不宜過大 (維持振幅小於 8%)
             if (recent_max_p - recent_min_p) / recent_min_p > 0.08:
                 continue
                 
-            # 條件 C: 一個月內極度量縮 (近期均量不到當初爆量日成交量的 10%)
-            if recent_mean_vol > (max_vol * 0.10):
+            # 條件 D: 量縮沉澱 (近期均量小於爆量日成交量的 25%)
+            if recent_mean_vol > (max_vol * 0.25):
                 continue
                 
-            # 條件 D: 確保最後一個交易日依然保持絕對靜止 (不可大於一個月極低均量的 1.5 倍)
+            # 條件 E: 確保最後一個交易日維持靜止 (不可大於近期極低均量的 1.5 倍)
             if current_vol > (recent_mean_vol * 1.5):
                 continue
                 
-            # 條件 E: 排除流動性過差的個股，並鎖定收盤價小於 20 元的低價股
-            if recent_mean_vol < 100000 or current_close >= 20: 
+            # 條件 F: 排除極端冷門股 (均量至少大於 300 張，300000 股)
+            if recent_mean_vol < 300000: 
                 continue
 
             clean_code = ticker.split('.')[0]
             name = stock_dict[ticker]
             
-            # 計算距離基準價的幅度
+            # 計算距離防守基準價的幅度
             diff_pct = (current_close - base_price) / base_price * 100
             
             pe_str = get_yahoo_pe(clean_code)
@@ -149,7 +156,8 @@ def find_bottom_consolidation_stocks():
             matched_stocks.append(
                 f"📊 **{clean_code} {name}** | {today_slash_str}\n"
                 f"收盤價: `{current_close:.2f}` | 一個月盤整均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}`\n"
-                f"🔍 歷史爆量基準價: `{base_price:.2f}` (距基準價幅度: `{diff_pct:+.2f}%`)\n"
+                f"🛡️ 爆量防守低點: `{base_price:.2f}` (距防守價幅度: `{diff_pct:+.2f}%`)\n"
+                f"📈 季線位階: `{current_ma60:.2f}` (已站上MA60)\n"
                 f"🔗 {yahoo_link}"
             )
                 
@@ -157,12 +165,12 @@ def find_bottom_consolidation_stocks():
             continue
 
     # 組合 Discord 訊息
-    message = f"🎯 **台股 {today_str} 爆量拉回沉澱一個月策略清單**\n" + "="*30 + "\n"
-    message += "(條件：20元以下、歷史出量、長達一個月量縮至10%以下、價格振幅8%內)\n\n"
+    message = f"🎯 **台股 {today_str} 強勢底盤整理與價值股篩選**\n" + "="*30 + "\n"
+    message += "(條件：均量300張以上、站上季線、守住爆量低點、長達一個月量縮至25%以下、價格振幅8%內)\n\n"
     if matched_stocks:
         message += "\n\n".join(matched_stocks)
     else:
-        message += "今天沒有符合此極度靜止型態的個股。"
+        message += "今天沒有符合此強勢靜止型態的個股。"
     
     send_discord_message(message)
 
