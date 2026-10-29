@@ -71,6 +71,25 @@ def get_yahoo_pe(stock_code):
         pass
     return "N/A"
 
+def get_yahoo_nav(stock_code):
+    """直接爬取台灣奇摩股市網頁上的每股淨值"""
+    url = f"https://tw.stock.yahoo.com/quote/{stock_code}/profile"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    try:
+        res = requests.get(url, headers=headers, timeout=5, verify=False)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, 'html.parser')
+            nav_label = soup.find("span", string=lambda t: t and "每股淨值" in t)
+            if nav_label:
+                nav_value_div = nav_label.find_next_sibling("div")
+                if nav_value_div:
+                    return nav_value_div.get_text(strip=True)
+    except Exception as e:
+        print(f"爬取 {stock_code} 每股淨值失敗: {e}")
+    return "不清楚"
+
 def send_discord_message(content_list, header):
     webhook_url = os.environ.get("DISCORD_WEBHOOK_URL")
     if not webhook_url:
@@ -99,7 +118,6 @@ def find_bottom_consolidation_stocks():
     print(f"上市股票數量: {twse_count}")
     print(f"上櫃股票數量: {tpex_count}")
     
-    # 強制中斷防呆機制
     if twse_count == 0 or tpex_count == 0:
         error_msg = "錯誤：未能完整取得上市或上櫃股票清單，停止執行。"
         print(error_msg)
@@ -118,7 +136,6 @@ def find_bottom_consolidation_stocks():
     print("正在下載加權指數 (^TWII) 數據以計算相對強度與交易日曆...")
     twii_data = yf.download("^TWII", period="9mo", auto_adjust=True, progress=False)
     
-    # 建立交易日曆對照表，用於比對是否為連續交易日
     if twii_data.empty:
         print("錯誤：無法取得加權指數資料，停止執行。")
         return
@@ -244,8 +261,8 @@ def find_bottom_consolidation_stocks():
             clean_code = ticker.split('.')[0]
             name = stock_dict[ticker]
             pe_str = get_yahoo_pe(clean_code)
+            nav_str = get_yahoo_nav(clean_code)  # 取得每股淨值
             
-            # 狀態追蹤與數據儲存邏輯
             current_date_idx = trading_days.index(latest_date_str)
             prev_trading_day_str = trading_days[current_date_idx - 1] if current_date_idx > 0 else None
             
@@ -273,7 +290,7 @@ def find_bottom_consolidation_stocks():
                         signal_status = f"🔄 持續觀察 (首次: {hist['first_seen']})"
                     else:
                         signal_status = f"⚠️ 重新入選 (前次: {hist['last_seen']})"
-                        hist["first_seen"] = latest_date_str # 重置觀察週期起點
+                        hist["first_seen"] = latest_date_str
                         
                     hist["last_seen"] = latest_date_str
                     hist["signal_dates"].append(latest_date_str)
@@ -283,7 +300,7 @@ def find_bottom_consolidation_stocks():
                 matched_stocks.append(
                     f"📊 **{clean_code} {name}** | {latest_date_str} [{signal_status}]\n"
                     f"收盤價: `{current_close:.2f}` | 距支撐價幅度: `{support_distance*100:+.2f}%`\n"
-                    f"均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}`\n"
+                    f"均量: `{int(recent_mean_vol / 1000)}` 張 | 本益比: `{pe_str}` | 每股淨值: `{nav_str}`\n"
                     f"🛡️ 防守低點(還原權息): `{base_price:.2f}`\n"
                     f"📈 季線位階: `{current_ma60:.2f}` (向上趨勢且優於大盤)\n"
                     f"🔗 <https://tw.stock.yahoo.com/quote/{clean_code}/technical-analysis>"
